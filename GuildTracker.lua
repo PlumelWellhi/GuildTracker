@@ -112,13 +112,22 @@ local function getplayertable(...)
 end
 
 local function sanitizeName(name)
-	local hyphen = strfind(name, "-")
-	if hyphen ~= nil then
-	  if strsub(name, hyphen + 1) == GetRealmName() then
-			name = strsub(name, 1, hyphen - 1)
-		end
-	end
-	return name
+        local hyphen = strfind(name, "-")
+        if hyphen ~= nil then
+          if strsub(name, hyphen + 1) == GetRealmName() then
+                        name = strsub(name, 1, hyphen - 1)
+                end
+        end
+        return name
+end
+
+local function NormalizeName(name)
+        local realm = GetRealmName()
+        name = name:gsub(("-%s"):format(realm), "")
+        if strfind(name, "-") == nil then
+                name = name .. "-" .. realm
+        end
+        return name
 end
 
 
@@ -706,32 +715,29 @@ function GuildTracker:UpgradeGuildDatabase()
 		end
 	end
 
-	if self.GuildDB.version == 3 then
-		self:Debug("Upgrading database to version 4")
-		self.GuildDB.version = 4
-		local homeRealm = GetRealmName()
+        if self.GuildDB.version == 3 then
+                self:Debug("Upgrading database to version 4")
+                self.GuildDB.version = 4
+        end
 
-		local function FixName(name)
-			if strfind(name, "-") == nil then
-				return name .. "-" .. homeRealm
-			end
-			return name
-		end
-
-		for i = 1, #self.GuildDB.roster do
-			local info = self.GuildDB.roster[i]
-			info[Field.Name] = FixName(info[Field.Name])
-		end
-		for i = 1, #self.GuildDB.changes do
-			local change = self.GuildDB.changes[i]
-			if (change.oldinfo[Field.Name]) then
-				change.oldinfo[Field.Name] = FixName(change.oldinfo[Field.Name])
-			end
-			if (change.newinfo[Field.Name]) then
-				change.newinfo[Field.Name] = FixName(change.newinfo[Field.Name])
-			end
-		end
-	end
+        -- Ensure all stored names have a single realm suffix
+        if self.GuildDB.roster then
+                for i = 1, #self.GuildDB.roster do
+                        local info = self.GuildDB.roster[i]
+                        info[Field.Name] = NormalizeName(info[Field.Name])
+                end
+        end
+        if self.GuildDB.changes then
+                for i = 1, #self.GuildDB.changes do
+                        local change = self.GuildDB.changes[i]
+                        if change.oldinfo and change.oldinfo[Field.Name] then
+                                change.oldinfo[Field.Name] = NormalizeName(change.oldinfo[Field.Name])
+                        end
+                        if change.newinfo and change.newinfo[Field.Name] then
+                                change.newinfo[Field.Name] = NormalizeName(change.newinfo[Field.Name])
+                        end
+                end
+        end
 end
 
 --------------------------------------------------------------------------------
@@ -757,7 +763,9 @@ function GuildTracker:UpdateGuildRoster()
 			break
 		end
 
-		years, months, days, hours = GetGuildRosterLastOnline(i)
+                name = NormalizeName(name)
+
+                years, months, days, hours = GetGuildRosterLastOnline(i)
 		lastOnline = (online or not years) and 0 or (years * 365 + months * 30.417 + days + hours/24)
 		
 		tinsert(players, getplayertable(name, rankIndex, classconst, level, note, officernote, lastOnline, achievementPoints, canSoR, repStanding))
